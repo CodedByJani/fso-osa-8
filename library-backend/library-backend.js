@@ -83,14 +83,24 @@ const typeDefs = `
 
   type Author {
     name: String!
+    born: Int
     bookCount: Int!
   }
 
   type Query {
     bookCount: Int!
     authorCount: Int!
-    allBooks: [Book!]!
+    allBooks(author: String, genre: String): [Book!]!
     allAuthors: [Author!]!
+  }
+
+  type Mutation {
+    addBook(
+      title: String!
+      author: String!
+      published: Int!
+      genres: [String!]!
+    ): Book
   }
 `;
 
@@ -98,12 +108,38 @@ const resolvers = {
   Query: {
     bookCount: () => books.length,
     authorCount: () => authors.length,
-    allBooks: () => books,
+    allBooks: (root, args) => {
+      return books.filter((book) => {
+        let authorMatches = true;
+        let genreMatches = true;
+
+        if (args.author) authorMatches = book.author === args.author;
+        if (args.genre) genreMatches = book.genres.includes(args.genre);
+
+        return authorMatches && genreMatches;
+      });
+    },
     allAuthors: () => {
       return authors.map((author) => ({
         name: author.name,
+        born: author.born || null,
         bookCount: books.filter((book) => book.author === author.name).length,
       }));
+    },
+  },
+  Mutation: {
+    addBook: (root, args) => {
+      if (!authors.find((a) => a.name === args.author)) {
+        authors.push({
+          name: args.author,
+          id: `${Math.random()}`,
+          born: null,
+        });
+      }
+
+      const newBook = { ...args, id: `${Math.random()}` };
+      books.push(newBook);
+      return newBook;
     },
   },
 };

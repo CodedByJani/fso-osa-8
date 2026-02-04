@@ -1,5 +1,6 @@
 const { GraphQLError } = require("graphql");
 const jwt = require("jsonwebtoken");
+const bcrypt = require("bcrypt");
 
 const Book = require("./models/book");
 const Author = require("./models/author");
@@ -38,14 +39,19 @@ const resolvers = {
       }));
     },
 
-    me: (root, args, context) => {
-      return context.currentUser;
-    },
+    me: (root, args, context) => context.currentUser,
   },
 
   Mutation: {
     createUser: async (root, args) => {
-      const user = new User(args);
+      const saltRounds = 10;
+      const passwordHash = await bcrypt.hash(args.password, saltRounds);
+
+      const user = new User({
+        username: args.username,
+        favoriteGenre: args.favoriteGenre,
+        passwordHash,
+      });
 
       try {
         return await user.save();
@@ -62,12 +68,14 @@ const resolvers = {
     login: async (root, args) => {
       const user = await User.findOne({ username: args.username });
 
-      // kovakoodattu salasana
-      if (!user || args.password !== "secret") {
+      const passwordCorrect =
+        user === null
+          ? false
+          : await bcrypt.compare(args.password, user.passwordHash);
+
+      if (!user || !passwordCorrect) {
         throw new GraphQLError("wrong credentials", {
-          extensions: {
-            code: "BAD_USER_INPUT",
-          },
+          extensions: { code: "BAD_USER_INPUT" },
         });
       }
 
@@ -89,26 +97,19 @@ const resolvers = {
       }
 
       let author = await Author.findOne({ name: args.author });
-
       if (!author) {
         author = new Author({ name: args.author });
         await author.save();
       }
 
-      const book = new Book({
-        ...args,
-        author: author._id,
-      });
+      const book = new Book({ ...args, author: author._id });
 
       try {
         await book.save();
         return book.populate("author");
       } catch (error) {
         throw new GraphQLError(error.message, {
-          extensions: {
-            code: "BAD_USER_INPUT",
-            invalidArgs: args,
-          },
+          extensions: { code: "BAD_USER_INPUT", invalidArgs: args },
         });
       }
     },

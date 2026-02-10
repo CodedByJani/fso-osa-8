@@ -17,7 +17,6 @@ import { PubSub } from "graphql-subscriptions";
 
 const pubsub = new PubSub();
 
-// MongoDB-yhteys
 mongoose
   .connect(MONGODB_URI)
   .then(() => console.log("connected to MongoDB"))
@@ -25,29 +24,22 @@ mongoose
 
 const schema = makeExecutableSchema({ typeDefs, resolvers });
 
-// Express ja HTTP-server
 const app = express();
 
-// CORS: salli vain frontend
 app.use(cors({ origin: "http://localhost:5173" }));
 
-// HTTP-server Expressistä
 const httpServer = createServer(app);
 
-// WebSocket server subscriptioneille
 const wsServer = new WebSocketServer({
   server: httpServer,
   path: "/graphql",
 });
 
-// Subscriptionien yhdistäminen
 useServer({ schema, context: () => ({ pubsub }) }, wsServer);
 
-// Apollo Server
 const server = new ApolloServer({ schema });
 await server.start();
 
-// Express middleware Apollo Serverille
 app.use(
   "/graphql",
   express.json(),
@@ -64,7 +56,6 @@ app.use(
   }),
 );
 
-// Start server
 httpServer.listen(4000, () => {
   console.log(`Server ready at http://localhost:4000/graphql`);
   console.log(`Subscriptions ready at ws://localhost:4000/graphql`);

@@ -34,13 +34,18 @@ export const resolvers = {
 
     allAuthors: async () => {
       const authors = await Author.find({});
-      const books = await Book.find({});
 
-      return authors.map((a) => ({
-        ...a.toObject(),
-        bookCount: books.filter((b) => b.author.toString() === a._id.toString())
-          .length,
-      }));
+      const counts = await Book.aggregate([
+        { $group: { _id: "$author", count: { $sum: 1 } } },
+      ]);
+
+      return authors.map((a) => {
+        const c = counts.find((x) => x._id.toString() === a._id.toString());
+        return {
+          ...a.toObject(),
+          bookCount: c ? c.count : 0,
+        };
+      });
     },
 
     me: (root, args, context) => context.currentUser,
@@ -112,7 +117,6 @@ export const resolvers = {
         await book.save();
         const populatedBook = await book.populate("author");
 
-        // julkaistaan subscription
         context.pubsub.publish(BOOK_ADDED, {
           bookAdded: populatedBook,
         });

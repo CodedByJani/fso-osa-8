@@ -1,13 +1,17 @@
-const { GraphQLError } = require("graphql");
-const jwt = require("jsonwebtoken");
-const bcrypt = require("bcrypt");
+import { GraphQLError } from "graphql";
+import jwt from "jsonwebtoken";
+import bcrypt from "bcrypt";
+import { PubSub } from "graphql-subscriptions";
 
-const Book = require("./models/book");
-const Author = require("./models/author");
-const User = require("./models/user");
-const config = require("./utils/config");
+import { Book } from "./models/book.js";
+import { Author } from "./models/author.js";
+import { User } from "./models/user.js";
+import { JWT_SECRET } from "./utils/config.js";
 
-const resolvers = {
+const pubsub = new PubSub();
+const BOOK_ADDED = "BOOK_ADDED";
+
+export const resolvers = {
   Query: {
     bookCount: async () => Book.collection.countDocuments(),
     authorCount: async () => Author.collection.countDocuments(),
@@ -85,7 +89,7 @@ const resolvers = {
       };
 
       return {
-        value: jwt.sign(userForToken, config.JWT_SECRET),
+        value: jwt.sign(userForToken, JWT_SECRET),
       };
     },
 
@@ -106,7 +110,14 @@ const resolvers = {
 
       try {
         await book.save();
-        return book.populate("author");
+        const populatedBook = await book.populate("author");
+
+        // julkaistaan subscription
+        context.pubsub.publish(BOOK_ADDED, {
+          bookAdded: populatedBook,
+        });
+
+        return populatedBook;
       } catch (error) {
         throw new GraphQLError(error.message, {
           extensions: { code: "BAD_USER_INPUT", invalidArgs: args },
@@ -128,6 +139,11 @@ const resolvers = {
       return author.save();
     },
   },
-};
 
-module.exports = resolvers;
+  Subscription: {
+    bookAdded: {
+      subscribe: (root, args, context) =>
+        context.pubsub.asyncIterator(BOOK_ADDED),
+    },
+  },
+};
